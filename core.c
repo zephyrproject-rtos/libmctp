@@ -23,7 +23,11 @@
 #include "control.h"
 
 #if MCTP_DEFAULT_CLOCK_GETTIME
+#if defined(__ZEPHYR__)
+#include <zephyr/kernel.h>
+#else
 #include <time.h>
+#endif
 #endif
 
 #ifndef ARRAY_SIZE
@@ -247,6 +251,12 @@ struct mctp *mctp_init(void)
 }
 
 #if MCTP_DEFAULT_CLOCK_GETTIME
+#if defined(__ZEPHYR__)
+static uint64_t mctp_default_now(void *ctx __attribute__((unused)))
+{
+	return (uint64_t)k_uptime_get();
+}
+#else
 static uint64_t mctp_default_now(void *ctx __attribute__((unused)))
 {
 	struct timespec tp;
@@ -257,6 +267,7 @@ static uint64_t mctp_default_now(void *ctx __attribute__((unused)))
 	}
 	return (uint64_t)tp.tv_sec * 1000 + tp.tv_nsec / 1000000;
 }
+#endif
 #endif
 
 int mctp_setup(struct mctp *mctp, size_t struct_mctp_size)
