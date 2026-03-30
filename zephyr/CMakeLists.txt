@@ -15,6 +15,7 @@ if(CONFIG_MCTP)
 
   zephyr_library_sources(
     ${MCTP_SRC}/alloc.c
+    ${MCTP_SRC}/control.c
     ${MCTP_SRC}/crc32.c
     ${MCTP_SRC}/core.c
     ${MCTP_SRC}/log.c
