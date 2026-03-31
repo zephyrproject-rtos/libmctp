@@ -13,6 +13,10 @@ if(CONFIG_MCTP)
   zephyr_library_named(modules_mctp)
   zephyr_library_link_libraries(mctp)
 
+  zephyr_library_compile_definitions(
+    MCTP_MAX_MESSAGE_SIZE=${CONFIG_MCTP_MAX_MESSAGE_SIZE}
+  )
+
   zephyr_library_sources(
     ${MCTP_SRC}/alloc.c
     ${MCTP_SRC}/control.c
