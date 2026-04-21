@@ -1,5 +1,4 @@
 /* SPDX-License-Identifier: Apache-2.0 OR GPL-2.0-or-later */
-
 #define _GNU_SOURCE
 
 #ifdef NDEBUG
@@ -18,6 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <errno.h>
 
 #include "compiler.h"
 #include "libmctp-alloc.h"
@@ -31,7 +31,7 @@
 #define TEST_SRC_EID		10
 
 #ifndef ARRAY_SIZE
-#define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 #endif
 
 #define MAX_PAYLOAD_SIZE 50000
@@ -97,11 +97,11 @@ static void receive_ptkbuf(struct mctp_binding_test *binding,
 	rx_pkt->start = 0;
 	rx_pkt->end = MCTP_PACKET_SIZE(len);
 	rx_pkt->mctp_hdr_off = 0;
-	rx_pkt->next = NULL;
 	memcpy(rx_pkt->data, &pktbuf->hdr, sizeof(pktbuf->hdr));
 	memcpy(rx_pkt->data + sizeof(pktbuf->hdr), pktbuf->payload, alloc_size);
 
 	mctp_bus_rx((struct mctp_binding *)binding, rx_pkt);
+	__mctp_free(rx_pkt);
 }
 
 static void receive_one_fragment(struct mctp_binding_test *binding,
@@ -470,7 +470,7 @@ static void mctp_core_test_rx_with_tag()
 	pktbuf.hdr.dest = TEST_DEST_EID;
 	pktbuf.hdr.src = TEST_SRC_EID;
 
-	/* Set tag and tag owner fields for a recieve packet */
+	/* Set tag and tag owner fields for a receive packet */
 	flags_seq_tag = MCTP_HDR_FLAG_SOM | MCTP_HDR_FLAG_EOM |
 			(1 << MCTP_HDR_TO_SHIFT) | tag;
 	receive_one_fragment(binding, test_payload, MCTP_BTU, flags_seq_tag,
@@ -602,6 +602,76 @@ static void mctp_core_test_rx_with_broadcast_dst_eid()
 	mctp_destroy(mctp);
 }
 
+/*
+ * This test case tests tag allocation. 8 tags
+ * are allowed to be pending.
+ */
+static void mctp_core_test_tx_alloc_tag()
+{
+	struct mctp *mctp = NULL;
+	struct mctp_binding_test *binding = NULL;
+	struct test_params test_param;
+	uint8_t msg_tag;
+	void *msg;
+	int rc;
+	mctp_eid_t dest_eid1 = 30;
+	size_t msg_len = 10;
+
+	mctp_test_stack_init(&mctp, &binding, dest_eid1);
+	mctp_set_rx_all(mctp, rx_message, &test_param);
+
+	uint8_t used = 0;
+	for (int i = 0; i < 8; i++) {
+		test_param.seen = false;
+		test_param.msg_tag = 0xff;
+		test_param.tag_owner = false;
+
+		msg = __mctp_alloc(msg_len);
+		memset(msg, 0x99, msg_len);
+		rc = mctp_message_tx_request(mctp, dest_eid1, msg, msg_len,
+					     &msg_tag);
+		assert(rc == 0);
+		assert(test_param.seen == true);
+		assert(test_param.msg_tag == msg_tag);
+		assert(test_param.tag_owner == true);
+		used |= (1 << msg_tag);
+	}
+	assert(used == 0xff);
+
+	/* Ran out of tags */
+	test_param.seen = false;
+	msg = __mctp_alloc(msg_len);
+	memset(msg, 0x99, msg_len);
+	rc = mctp_message_tx_request(mctp, dest_eid1, msg, msg_len, &msg_tag);
+	assert(rc == -EBUSY);
+	assert(test_param.seen == false);
+
+	/* Send/Receive a response to one of those tags */
+	test_param.seen = false;
+	msg = __mctp_alloc(msg_len);
+	memset(msg, 0x99, msg_len);
+	/* Arbitrary one */
+	uint8_t replied_tag = 3;
+	rc = mctp_message_tx_alloced(mctp, dest_eid1, false, replied_tag, msg,
+				     msg_len);
+	assert(rc == 0);
+	assert(test_param.seen == true);
+	assert(test_param.msg_tag == replied_tag);
+	assert(test_param.tag_owner == false);
+
+	/* Now sending allocates that tag again, since it is the only spare one */
+	test_param.seen = false;
+	msg = __mctp_alloc(msg_len);
+	memset(msg, 0x99, msg_len);
+	rc = mctp_message_tx_request(mctp, dest_eid1, msg, msg_len, &msg_tag);
+	assert(rc == 0);
+	assert(test_param.seen == true);
+	assert(msg_tag == replied_tag);
+
+	mctp_binding_test_destroy(binding);
+	mctp_destroy(mctp);
+}
+
 /* clang-format off */
 #define TEST_CASE(test) { #test, test }
 static const struct {
@@ -620,15 +690,9 @@ static const struct {
 	TEST_CASE(mctp_core_test_rx_with_tag_multifragment),
 	TEST_CASE(mctp_core_test_rx_with_null_dst_eid),
 	TEST_CASE(mctp_core_test_rx_with_broadcast_dst_eid),
+	TEST_CASE(mctp_core_test_tx_alloc_tag),
 };
 /* clang-format on */
-
-#ifndef BUILD_ASSERT
-#define BUILD_ASSERT(x)                                                        \
-	do {                                                                   \
-		(void)sizeof(char[0 - (!(x))]);                                \
-	} while (0)
-#endif
 
 int main(void)
 {
@@ -636,7 +700,7 @@ int main(void)
 
 	mctp_set_log_stdio(MCTP_LOG_DEBUG);
 
-	BUILD_ASSERT(ARRAY_SIZE(mctp_core_tests) < SIZE_MAX);
+	static_assert(ARRAY_SIZE(mctp_core_tests) < SIZE_MAX, "size");
 	for (i = 0; i < ARRAY_SIZE(mctp_core_tests); i++) {
 		mctp_prlog(MCTP_LOG_DEBUG, "begin: %s",
 			   mctp_core_tests[i].name);

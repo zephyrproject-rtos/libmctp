@@ -736,8 +736,8 @@ static const struct mctp_binding_astlpc astlpc_layout_ctx = {
 static void astlpc_test_buffers_rx_offset_overflow(void)
 {
 	struct mctp_astlpc_layout l = {
-		.rx = { UINT32_MAX, BUFFER_MIN },
-		.tx = { control_size, BUFFER_MIN },
+		.rx = { UINT32_MAX, BUFFER_MIN, buffer_state_idle },
+		.tx = { control_size, BUFFER_MIN, buffer_state_idle },
 	};
 
 	assert(!mctp_astlpc_layout_validate(&astlpc_layout_ctx, &l));
@@ -746,8 +746,8 @@ static void astlpc_test_buffers_rx_offset_overflow(void)
 static void astlpc_test_buffers_tx_offset_overflow(void)
 {
 	struct mctp_astlpc_layout l = {
-		.rx = { control_size, BUFFER_MIN },
-		.tx = { UINT32_MAX, BUFFER_MIN },
+		.rx = { control_size, BUFFER_MIN, buffer_state_idle },
+		.tx = { UINT32_MAX, BUFFER_MIN, buffer_state_idle },
 	};
 
 	assert(!mctp_astlpc_layout_validate(&astlpc_layout_ctx, &l));
@@ -756,8 +756,9 @@ static void astlpc_test_buffers_tx_offset_overflow(void)
 static void astlpc_test_buffers_rx_size_overflow(void)
 {
 	struct mctp_astlpc_layout l = {
-		.rx = { control_size + BUFFER_MIN, UINT32_MAX },
-		.tx = { control_size, BUFFER_MIN },
+		.rx = { control_size + BUFFER_MIN, UINT32_MAX,
+			buffer_state_idle },
+		.tx = { control_size, BUFFER_MIN, buffer_state_idle },
 	};
 
 	assert(!mctp_astlpc_layout_validate(&astlpc_layout_ctx, &l));
@@ -766,8 +767,9 @@ static void astlpc_test_buffers_rx_size_overflow(void)
 static void astlpc_test_buffers_tx_size_overflow(void)
 {
 	struct mctp_astlpc_layout l = {
-		.rx = { control_size, BUFFER_MIN },
-		.tx = { control_size + BUFFER_MIN, UINT32_MAX },
+		.rx = { control_size, BUFFER_MIN, buffer_state_idle },
+		.tx = { control_size + BUFFER_MIN, UINT32_MAX,
+			buffer_state_idle },
 	};
 
 	assert(!mctp_astlpc_layout_validate(&astlpc_layout_ctx, &l));
@@ -776,8 +778,9 @@ static void astlpc_test_buffers_tx_size_overflow(void)
 static void astlpc_test_buffers_rx_window_violation(void)
 {
 	struct mctp_astlpc_layout l = {
-		.rx = { LPC_WIN_SIZE - BUFFER_MIN + 1, BUFFER_MIN },
-		.tx = { control_size, BUFFER_MIN },
+		.rx = { LPC_WIN_SIZE - BUFFER_MIN + 1, BUFFER_MIN,
+			buffer_state_idle },
+		.tx = { control_size, BUFFER_MIN, buffer_state_idle },
 	};
 
 	assert(!mctp_astlpc_layout_validate(&astlpc_layout_ctx, &l));
@@ -786,8 +789,9 @@ static void astlpc_test_buffers_rx_window_violation(void)
 static void astlpc_test_buffers_tx_window_violation(void)
 {
 	struct mctp_astlpc_layout l = {
-		.rx = { control_size, BUFFER_MIN },
-		.tx = { LPC_WIN_SIZE - BUFFER_MIN + 1, BUFFER_MIN },
+		.rx = { control_size, BUFFER_MIN, buffer_state_idle },
+		.tx = { LPC_WIN_SIZE - BUFFER_MIN + 1, BUFFER_MIN,
+			buffer_state_idle },
 	};
 
 	assert(!mctp_astlpc_layout_validate(&astlpc_layout_ctx, &l));
@@ -796,8 +800,9 @@ static void astlpc_test_buffers_tx_window_violation(void)
 static void astlpc_test_buffers_rx_size_fails_btu(void)
 {
 	struct mctp_astlpc_layout l = {
-		.rx = { control_size, BUFFER_MIN - 1 },
-		.tx = { control_size + BUFFER_MIN, BUFFER_MIN },
+		.rx = { control_size, BUFFER_MIN - 1, buffer_state_idle },
+		.tx = { control_size + BUFFER_MIN, BUFFER_MIN,
+			buffer_state_idle },
 	};
 
 	assert(!mctp_astlpc_layout_validate(&astlpc_layout_ctx, &l));
@@ -806,8 +811,9 @@ static void astlpc_test_buffers_rx_size_fails_btu(void)
 static void astlpc_test_buffers_tx_size_fails_btu(void)
 {
 	struct mctp_astlpc_layout l = {
-		.rx = { control_size, BUFFER_MIN },
-		.tx = { control_size + BUFFER_MIN, BUFFER_MIN - 1 },
+		.rx = { control_size, BUFFER_MIN, buffer_state_idle },
+		.tx = { control_size + BUFFER_MIN, BUFFER_MIN - 1,
+			buffer_state_idle },
 	};
 
 	assert(!mctp_astlpc_layout_validate(&astlpc_layout_ctx, &l));
@@ -816,8 +822,9 @@ static void astlpc_test_buffers_tx_size_fails_btu(void)
 static void astlpc_test_buffers_overlap_rx_low(void)
 {
 	struct mctp_astlpc_layout l = {
-		.rx = { control_size, 2 * BUFFER_MIN },
-		.tx = { control_size + BUFFER_MIN, 2 * BUFFER_MIN },
+		.rx = { control_size, 2 * BUFFER_MIN, buffer_state_idle },
+		.tx = { control_size + BUFFER_MIN, 2 * BUFFER_MIN,
+			buffer_state_idle },
 	};
 
 	assert(!mctp_astlpc_layout_validate(&astlpc_layout_ctx, &l));
@@ -826,8 +833,9 @@ static void astlpc_test_buffers_overlap_rx_low(void)
 static void astlpc_test_buffers_overlap_tx_low(void)
 {
 	struct mctp_astlpc_layout l = {
-		.rx = { control_size + BUFFER_MIN, 2 * BUFFER_MIN },
-		.tx = { control_size, 2 * BUFFER_MIN },
+		.rx = { control_size + BUFFER_MIN, 2 * BUFFER_MIN,
+			buffer_state_idle },
+		.tx = { control_size, 2 * BUFFER_MIN, buffer_state_idle },
 	};
 
 	assert(!mctp_astlpc_layout_validate(&astlpc_layout_ctx, &l));
@@ -836,8 +844,8 @@ static void astlpc_test_buffers_overlap_tx_low(void)
 static void astlpc_test_buffers_overlap_exact(void)
 {
 	struct mctp_astlpc_layout l = {
-		.rx = { control_size, 2 * BUFFER_MIN },
-		.tx = { control_size, 2 * BUFFER_MIN },
+		.rx = { control_size, 2 * BUFFER_MIN, buffer_state_idle },
+		.tx = { control_size, 2 * BUFFER_MIN, buffer_state_idle },
 	};
 
 	assert(!mctp_astlpc_layout_validate(&astlpc_layout_ctx, &l));
@@ -846,8 +854,9 @@ static void astlpc_test_buffers_overlap_exact(void)
 static void astlpc_test_buffers_overlap_control(void)
 {
 	struct mctp_astlpc_layout l = {
-		.rx = { 0, BUFFER_MIN },
-		.tx = { control_size + BUFFER_MIN, BUFFER_MIN },
+		.rx = { 0, BUFFER_MIN, buffer_state_idle },
+		.tx = { control_size + BUFFER_MIN, BUFFER_MIN,
+			buffer_state_idle },
 	};
 
 	assert(!mctp_astlpc_layout_validate(&astlpc_layout_ctx, &l));
@@ -1187,22 +1196,14 @@ static void astlpc_test_negotiate_mtu_high_low(void)
 	rc = mctp_astlpc_poll(ctx.host.astlpc);
 	assert(rc == 0);
 
-	/*
-	 * Transmit a message to place a packet on the interface. This releases the buffer and
-	 * disables the binding, plugging the binding's transmit queue while the host hasn't polled
-	 * to pull the packet off.
-	 */
 	rc = mctp_message_tx(ctx.bmc.mctp, 9, MCTP_MESSAGE_TO_DST, tag, msg,
 			     sizeof(msg));
-
-	/* Leave the packet in place on the interface by not polling the host binding */
-
-	/*
-	 * Transmit another message to force packetisation at the current MTU while the binding is
-	 * disabled, leaving the packet(s) in the binding's transmit queue
-	 */
-	rc = mctp_message_tx(ctx.bmc.mctp, 9, MCTP_MESSAGE_TO_DST, tag, msg,
-			     sizeof(msg));
+	rc = mctp_astlpc_poll(ctx.bmc.astlpc);
+	assert(rc == 0);
+	rc = mctp_astlpc_poll(ctx.host.astlpc);
+	assert(rc == 0);
+	/* Check the message was received */
+	assert(ctx.count == 1);
 
 	/* Tear-down the host so we can bring up a new one */
 	endpoint_destroy(&ctx.host);
@@ -1226,22 +1227,15 @@ static void astlpc_test_negotiate_mtu_high_low(void)
 	rc = mctp_astlpc_poll(ctx.host.astlpc);
 	assert(rc == 0);
 
-	/*
-	 * Check that there are no outstanding messages to be received by the host. The message
-	 * packetised on the BMC at the larger MTU must be dropped as its now no longer possible to
-	 * transmit those packets
-	 */
-	rc = mctp_astlpc_poll(ctx.host.astlpc);
-	assert(rc == 0);
-	assert(ctx.count == 0);
-
-	/* Transmit another message from the BMC to the host, packetised using the new MTU */
 	rc = mctp_message_tx(ctx.bmc.mctp, 9, MCTP_MESSAGE_TO_DST, tag, msg,
-			     hmtu);
-
-	/* Check that the most recent BMC transmission is received by the host */
-	rc = mctp_astlpc_poll(ctx.host.astlpc);
-	assert(rc == 0);
+			     sizeof(msg));
+	while (!mctp_astlpc_tx_done(ctx.bmc.astlpc)) {
+		rc = mctp_astlpc_poll(ctx.bmc.astlpc);
+		assert(rc == 0);
+		rc = mctp_astlpc_poll(ctx.host.astlpc);
+		assert(rc == 0);
+	}
+	/* Check the mssage was received */
 	assert(ctx.count == 1);
 
 	/* Ensure buffer ownership is returned to the BMC and the BMC Tx queue is processed */
@@ -1515,20 +1509,13 @@ static const struct {
 };
 /* clang-format on */
 
-#ifndef BUILD_ASSERT
-#define BUILD_ASSERT(x)                                                        \
-	do {                                                                   \
-		(void)sizeof(char[0 - (!(x))]);                                \
-	} while (0)
-#endif
-
 int main(void)
 {
 	size_t i;
 
 	mctp_set_log_stdio(MCTP_LOG_DEBUG);
 
-	BUILD_ASSERT(ARRAY_SIZE(astlpc_tests) < SIZE_MAX);
+	static_assert(ARRAY_SIZE(astlpc_tests) < SIZE_MAX, "size");
 	for (i = 0; i < ARRAY_SIZE(astlpc_tests); i++) {
 		mctp_prlog(MCTP_LOG_DEBUG, "begin: %s", astlpc_tests[i].name);
 		astlpc_tests[i].test();

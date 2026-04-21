@@ -2,7 +2,9 @@
 
 #define _GNU_SOURCE
 
+#ifdef HAVE_CONFIG_H
 #include "config.h"
+#endif
 
 #define SD_LISTEN_FDS_START 3
 
@@ -29,7 +31,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 
-#define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
 #if HAVE_SYSTEMD_SD_DAEMON_H
 #include <systemd/sd-daemon.h>
@@ -64,7 +66,7 @@ struct ctx {
 	struct binding *binding;
 	bool verbose;
 	int local_eid;
-	void *buf;
+	uint8_t *buf;
 	size_t buf_size;
 
 	int sock;
@@ -459,6 +461,7 @@ static int run_daemon(struct ctx *ctx)
 	bool clients_changed = false;
 	sigset_t mask;
 	int rc, i;
+	int n_clients;
 
 	ctx->pollfds = malloc(FD_NR * sizeof(struct pollfd));
 
@@ -532,12 +535,23 @@ static int run_daemon(struct ctx *ctx)
 			}
 		}
 
+		n_clients = ctx->n_clients;
 		if (ctx->pollfds[FD_BINDING].revents) {
 			rc = 0;
 			if (ctx->binding->process)
 				rc = ctx->binding->process(ctx->binding);
 			if (rc)
 				break;
+		}
+		if (n_clients != ctx->n_clients) {
+			/*
+			 * Clients (i.e. sockets) were removed in the binding->process() function
+			 * call above. More specifically in function rx_message(), invoked through
+			 * the binding->process() call.
+			 * We must go back to the top of the loop to realign the pollfds sockets array
+			 */
+			clients_changed = true;
+			continue;
 		}
 
 		for (i = 0; i < ctx->n_clients; i++) {
@@ -599,7 +613,7 @@ int main(int argc, char *const *argv)
 	ctx->pcap.socket.path = NULL;
 
 	for (;;) {
-		rc = getopt_long(argc, argv, "b:es::v", options, NULL);
+		rc = getopt_long(argc, argv, "b:e:s::v", options, NULL);
 		if (rc == -1)
 			break;
 		switch (rc) {

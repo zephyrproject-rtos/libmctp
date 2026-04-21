@@ -17,7 +17,7 @@
 #include <poll.h>
 #include <unistd.h>
 #else
-static const size_t write(int fd, void *buf, size_t len)
+static const size_t write(int fd, const void *buf, size_t len)
 {
 	return -1;
 }
@@ -25,36 +25,7 @@ static const size_t write(int fd, void *buf, size_t len)
 
 #define pr_fmt(x) "serial: " x
 
-/*
- * @fn: A function that will copy data from the buffer at src into the dst object
- * @dst: An opaque object to pass as state to fn
- * @src: A pointer to the buffer of data to copy to dst
- * @len: The length of the data pointed to by src
- * @return: 0 on succes, negative error code on failure
- *
- * Pre-condition: fn returns a write count or a negative error code
- * Post-condition: All bytes written or an error has occurred
- */
-#define mctp_write_all(fn, dst, src, len)                                      \
-	({                                                                     \
-		typeof(src) __src = src;                                       \
-		ssize_t wrote;                                                 \
-		while (len) {                                                  \
-			wrote = fn(dst, __src, len);                           \
-			if (wrote < 0)                                         \
-				break;                                         \
-			__src += wrote;                                        \
-			len -= wrote;                                          \
-		}                                                              \
-		len ? wrote : 0;                                               \
-	})
-
-static ssize_t mctp_serial_write(int fildes, const void *buf, size_t nbyte)
-{
-	ssize_t wrote;
-
-	return ((wrote = write(fildes, buf, nbyte)) < 0) ? -errno : wrote;
-}
+#define SERIAL_BTU MCTP_BTU
 
 #include "libmctp.h"
 #include "libmctp-alloc.h"
@@ -73,6 +44,7 @@ struct mctp_binding_serial {
 	/* receive buffer and state */
 	uint8_t rxbuf[1024];
 	struct mctp_pktbuf *rx_pkt;
+	uint8_t rx_storage[MCTP_PKTBUF_SIZE(SERIAL_BTU)] PKTBUF_STORAGE_ALIGN;
 	uint8_t rx_exp_len;
 	uint16_t rx_fcs;
 	uint16_t rx_fcs_calc;
@@ -89,6 +61,8 @@ struct mctp_binding_serial {
 
 	/* temporary transmit buffer */
 	uint8_t txbuf[256];
+	/* used by the MCTP stack */
+	uint8_t tx_storage[MCTP_PKTBUF_SIZE(SERIAL_BTU)] PKTBUF_STORAGE_ALIGN;
 };
 
 #define binding_to_serial(b)                                                   \
@@ -109,6 +83,40 @@ struct mctp_serial_trailer {
 	uint8_t fcs_lsb;
 	uint8_t flag;
 };
+
+/*
+ * @fn: A function that will copy data from the buffer at src into the dst object
+ * @dst: An opaque object to pass as state to fn
+ * @src: A pointer to the buffer of data to copy to dst
+ * @len: The length of the data pointed to by src
+ * @return: 0 on success, negative error code on failure
+ *
+ * Pre-condition: fn returns a write count or a negative error code
+ * Post-condition: All bytes written or an error has occurred
+ */
+static ssize_t mctp_write_all(mctp_serial_tx_fn fn, void *dst, uint8_t *src,
+			      size_t len)
+{
+	uint8_t *__src = src;
+	ssize_t wrote;
+	while (len) {
+		wrote = fn(dst, __src, len);
+		if (wrote < 0) {
+			break;
+		}
+		__src += wrote;
+		len -= wrote;
+	}
+	return len ? wrote : 0;
+}
+
+static int mctp_serial_write(void *fildesp, void *buf, size_t nbyte)
+{
+	ssize_t wrote;
+	int fildes = *((int *)fildesp);
+
+	return ((wrote = write(fildes, buf, nbyte)) < 0) ? -errno : wrote;
+}
 
 static size_t mctp_serial_pkt_escape(struct mctp_pktbuf *pkt, uint8_t *buf)
 {
@@ -176,7 +184,7 @@ static int mctp_binding_serial_tx(struct mctp_binding *b,
 	len += sizeof(*hdr) + sizeof(*tlr);
 
 	if (!serial->tx_fn)
-		return mctp_write_all(mctp_serial_write, serial->fd,
+		return mctp_write_all(mctp_serial_write, &serial->fd,
 				      &serial->txbuf[0], len);
 
 	return mctp_write_all(serial->tx_fn, serial->tx_fn_data,
@@ -195,10 +203,9 @@ static void mctp_serial_finish_packet(struct mctp_binding_serial *serial,
 	serial->rx_pkt = NULL;
 }
 
-static void mctp_serial_start_packet(struct mctp_binding_serial *serial,
-				     uint8_t len)
+static void mctp_serial_start_packet(struct mctp_binding_serial *serial)
 {
-	serial->rx_pkt = mctp_pktbuf_alloc(&serial->binding, len);
+	serial->rx_pkt = mctp_pktbuf_init(&serial->binding, serial->rx_storage);
 }
 
 static void mctp_rx_consume_one(struct mctp_binding_serial *serial, uint8_t c)
@@ -250,7 +257,7 @@ static void mctp_rx_consume_one(struct mctp_binding_serial *serial, uint8_t c)
 			mctp_prdebug("invalid size %d", c);
 			serial->rx_state = STATE_WAIT_SYNC_START;
 		} else {
-			mctp_serial_start_packet(serial, 0);
+			mctp_serial_start_packet(serial);
 			pkt = serial->rx_pkt;
 			serial->rx_exp_len = c;
 			serial->rx_state = STATE_DATA;
@@ -317,7 +324,7 @@ static void mctp_rx_consume(struct mctp_binding_serial *serial, const void *buf,
 	size_t i;
 
 	for (i = 0; i < len; i++)
-		mctp_rx_consume_one(serial, *(uint8_t *)(buf + i));
+		mctp_rx_consume_one(serial, ((const uint8_t *)buf)[i]);
 }
 
 #ifdef MCTP_HAVE_FILEIO
@@ -330,7 +337,8 @@ int mctp_serial_read(struct mctp_binding_serial *serial)
 		return -1;
 
 	if (len < 0) {
-		mctp_prerr("can't read from serial device: %m");
+		mctp_prerr("can't read from serial device: %s",
+			   strerror(errno));
 		return -1;
 	}
 
@@ -353,7 +361,7 @@ int mctp_serial_open_path(struct mctp_binding_serial *serial,
 {
 	serial->fd = open(device, O_RDWR);
 	if (serial->fd < 0)
-		mctp_prerr("can't open device %s: %m", device);
+		mctp_prerr("can't open device %s: %s", device, strerror(errno));
 
 	return 0;
 }
@@ -400,9 +408,10 @@ struct mctp_binding_serial *mctp_serial_init(void)
 	serial->rx_pkt = NULL;
 	serial->binding.name = "serial";
 	serial->binding.version = 1;
-	serial->binding.pkt_size = MCTP_PACKET_SIZE(MCTP_BTU);
+	serial->binding.pkt_size = MCTP_PACKET_SIZE(SERIAL_BTU);
 	serial->binding.pkt_header = 0;
 	serial->binding.pkt_trailer = 0;
+	serial->binding.tx_storage = serial->tx_storage;
 
 	serial->binding.start = mctp_serial_core_start;
 	serial->binding.tx = mctp_binding_serial_tx;
