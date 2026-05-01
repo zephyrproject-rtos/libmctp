@@ -17,6 +17,10 @@ if(CONFIG_MCTP)
     MCTP_MAX_MESSAGE_SIZE=${CONFIG_MCTP_MAX_MESSAGE_SIZE}
   )
 
+  zephyr_library_compile_definitions_ifndef(CONFIG_LIBMCTP_CONTROL_HANDLER_ENABLED
+    MCTP_CONTROL_HANDLER_ENABLED=0
+  )
+
   zephyr_library_sources(
     ${MCTP_SRC}/alloc.c
     ${MCTP_SRC}/control.c
